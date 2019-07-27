@@ -1,25 +1,290 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Reproducible research: Project1"
+author: "Nadia Stavisky"
+date: "7/21/2019"
+output: html_document
 ---
 
+```{r global.options, include = FALSE, echo=FALSE}
+#load library 'knitr', set a golobal default options:
+library(knitr)
+library(ggplot2)
+library(formatR)
+library(dplyr)
+library(tidyr)
+library(e1071)
+opts_chunk$set(
+    echo = TRUE, # if FALSE knitr will not display code in the code chunk above it's results
+    cache = FALSE, # if TRUE knitr will cache the results to reuse in future knits
+    fig.width   = 10, # the width for plots created by code chunk
+    fig.height  = 5, # the height for plots created by code chunk
+    fig.align   = 'center', # how to align graphics in the final doc. 'left', 'right', 'center'
+    fig.path    = 'figs/',  # file path to the directory where knitr shall store the graphics files
+    #results     = 'asis',   # knitr will pass through results without reformatting them
+    tidy = TRUE,
+    tidy.opts=list(width.cutoff=60),
+    strip.white = TRUE)     # if FALSE knitr will not remove white spaces at the beg or end of code chunk
+```
 
-## Loading and preprocessing the data
+##Introduction
+
+It is now possible to collect a large amount of data about personal movement using activity monitoring devices such as a [Fitbit](https://www.fitbit.com/home), [Nike Fuelband](http://www.nike.com/us/en_us/c/nikeplus-fuelband), or [Jawbone Up](https://jawbone.com/up). These type of devices are part of the “quantified self” movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. But these data remain under-utilized both because the raw data are hard to obtain and there is a lack of statistical methods and software for processing and interpreting the data.
+
+This assignment makes use of data from a personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
+
+##Loading and preprocessing the data
+
+The data for this assignment downloaded from the course web site:
+
+Dataset: [Activity monitoring data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity)
+```{r}
+#download data, unzip, import file into R object
+datapath <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+download.file(datapath, destfile = "./Fdata.zip")
+unzip("Fdata.zip")
+activity <- read.csv2("activity.csv", header = TRUE, sep = ",")
+```
+The variables included in this dataset are:
+```{r}
+names(activity)
+```
+data set structure:
+```{r}
+str(activity)
+nrows <- nrow(activity)
+ncols <- ncol(activity)
+```
+There are `r nrows` rows/observations and `r ncols` columns/variables in the data set.
+```{r}
+ndate <- nlevels(as.factor(activity$date))
+ninterval <- nlevels(as.factor(activity$interval))
+
+```
+
+Data set contains records of steps done in `r ndate` made in each `r ninterval` intervals.
+
+transform date field from factors into dates:
+```{r}
+activity$date <- as.Date(activity$date, format = "%Y-%m-%d")
+```
+
+dataset summary:
+```{r}
+summary(activity)
+```
+
+quick view on data set:
+```{r}
+head(activity)
+```
+
+
+##What is mean total number of steps taken per day?
+###For this part of the assignment, the missing values in the dataset were ignored.
+
+The total number of steps taken per day:
+```{r}
+ttl_steps <- activity %>% 
+  filter(complete.cases(activity)) %>%
+  group_by(date) %>%
+  summarise(steps_sum = sum(steps, na.rm = TRUE))
+head(ttl_steps)
+summary(ttl_steps)
+```
+A histogram of the total number of steps taken each day
+
+```{r}
+a <- ggplot(data = ttl_steps, aes(ttl_steps$steps_sum))
+a + geom_histogram(breaks = seq(0,25000, by = 2500), col="blue", fill="blue", alpha=.4) +
+  geom_vline(aes(xintercept = mean(ttl_steps$steps_sum)), color = "red") +
+  geom_vline(aes(xintercept = median(ttl_steps$steps_sum)), color = "green") +
+   labs(title = "Histogram of Total Number of Steps Each Day\n*missing values removed", x = "Number of Steps", y = "Frequency") +
+   theme_bw()
+```
+```{r}
+mean <- mean(ttl_steps$steps_sum)
+median <- median(ttl_steps$steps_sum)
+```
+the $\color{red}{mean}$ and $\color{green}{median}$ of the total number of steps taken per day are `r mean` and `r median`  correspondingly.
+
+##What is the average daily activity pattern?
+
+The verage daily activity pattern by interval:
+```{r}
+avg_steps <- activity %>% 
+  filter(complete.cases(activity)) %>%
+  group_by(interval) %>%
+  summarise(steps_avg = mean(steps, na.rm = TRUE))
+head(avg_steps)
+summary(avg_steps)
+max <- as.numeric(c(avg_steps[which.max(avg_steps$steps_avg),1]))
+
+```
+
+A time series plot of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis):
+
+
+```{r}
+b <- ggplot(data = avg_steps, aes (x = as.integer(avg_steps$interval), y = avg_steps$steps_avg))
+b + geom_line() +
+  geom_vline(xintercept = max, color = "blue", size=1) +
+   labs(title = "Average number of steps taken, across all days", x = "5-minute interval", y = "Average number of steps" ) +
+   theme_bw()
+
+```
+
+the `r max` 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps.
+
+##Imputing missing values
+```{r}
+summary(activity)
+notcomplete <- sum(!complete.cases(activity))
+```
+Note that there are a number of days/intervals where there are missing steps values (coded as \color{red}{\verb|NA|}NA). The presence of missing days may introduce bias into some calculations or summaries of the data.
+
+There are `r notcomplete` total number of missing values in the dataset (i.e. the total number of rows with \color{red}{\verb|NA|}NAs).
+
+```{r}
+activity[,c("steps","date")] %>%
+  group_by(date) %>%
+  filter(!complete.cases(steps)) %>%
+  summarize(sum_na = sum(is.na(steps)))
+```
+There are 8 dates with 288 missing records in these days. due to the total number of intervals are 288 -  no intervals have any ecords in this days.
+
+```{r}
+activity[,c("steps","interval")] %>%
+  group_by(interval) %>%
+  filter(!complete.cases(steps)) %>%
+  summarize(sum_na = sum(is.na(steps))) %>%
+  summary()
+```
+Test on grouping data set by interval shows same result: each of 288 intervals has 8 dates where steps records are missing.
+
+Due to the above results we will build our strategy for replacing missing values based on summaries of data groupped by interval.
+
+To deside on a strategy for replacing missing values, we conduct some test on normality of the data groupped by interval. We use skewness to evaluate normality:
+```{r}
+test_int <- activity %>% 
+  filter(complete.cases(activity)) %>%
+  group_by(interval) %>%
+  summarise(steps_int_mean = mean(steps, na.rm = TRUE), steps_int_median = median(steps, na.rm = TRUE), steps_int_skw = skewness(steps, na.rm = TRUE))
+head(test_int)
+summary(test_int)
+```
+
+```{r}
+test_int_plot <- test_int %>%
+  gather(aggr_func, value, steps_int_mean:steps_int_median) %>%
+  ggplot(aes(x = interval, y = value, colour = aggr_func)) 
+  test_int_plot + geom_line() +
+   labs(title = "Mean and median of steps grouped by interval\n*missing values removed") +
+   theme_bw()
+  
+```
+
+
+From the plot above we can conclude that the data grouped either by interval or by date highly skewed left. Same we can conclude from skewness parametr. When data is seriously skewed like this, the median becomes far more representative of what’s ‘typical’ than the mean.
+
+We are going to use median for that interval as a strategy for filling in all of the missing values in the dataset.
+
+```{r}
+activity2 <- activity %>% 
+  group_by(interval) %>%
+  mutate(steps = replace(steps, is.na(steps), median(steps, na.rm =TRUE)))
+head(activity2)
+summary(activity2)
+```
+
+The total number of steps taken per day (data set with missing values replaced by Interval median):
+```{r}
+ttl_steps2 <- activity2 %>% 
+  group_by(date) %>%
+  summarise(steps_sum = sum(steps, na.rm = TRUE))
+head(ttl_steps2)
+summary(ttl_steps2)
+```
+
+A histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. 
+
+```{r}
+c <- ggplot(data = ttl_steps2, aes(ttl_steps2$steps_sum))
+c + geom_histogram(breaks = seq(0,25000, by = 2500), col="blue", fill="blue", alpha=.4) +
+   labs(title = "Histogram of Total Number of Steps Each Day\n*missing values replaced with interval median", x = "Number of Steps", y = "Frequency") +
+   theme_bw()
+```
+
+```{r}
+mean2 <- mean(ttl_steps2$steps_sum)
+median2 <- median(ttl_steps2$steps_sum)
+```
+the mean and median of the total number of steps taken per day are `r mean2` and `r median2` correspondingly.
+
+#Do these values differ from the estimates from the first part of the assignment? 
+#What is the impact of imputing missing data on the estimates of the total daily number of steps?
+
+```{r}
+ttl_steps$version <- "V1"
+ttl_steps2$version <- "V2"
+
+
+ttl_comb <- rbind(ttl_steps,ttl_steps2)
+
+ttl_vlines <- data.frame(version = levels(as.factor(ttl_comb$version)), mean_val = c(mean, mean2), median_val = c(median, median2))
+
+e <- ggplot(data = ttl_comb, aes(ttl_comb$steps_sum))
+e + geom_histogram(breaks = seq(0,25000, by = 2500), col="blue", fill="blue", alpha=.4) +
+  geom_vline(aes(xintercept = mean_val), data = ttl_vlines, color = "red") +
+  geom_vline(aes(xintercept = median_val), data = ttl_vlines, color = "green") +
+  facet_grid(version ~.) +
+   labs(title = "Histogram of Total Number of Steps Each Day\n*V1 - missing values removed\n*V2 - missing values replaced with interval median", x = "Number of Steps", y = "Frequency") +
+   theme_bw()
+```
+
+```{r}
+ttl_vlines
+```
+
+
+In the data set with replaced missing values Mean and Median values are differ from the first version of the data set summary (with missing values ignored).
+The imputing missing values effect on the steps distribution by dates results in appearing second pick, within 0 - 2500 steps group.
+
+##Are there differences in activity patterns between weekdays and weekends?
+Dataset used with the filled-in missing values for this part.
+
+Create a new factor variable in the dataset with two levels – “weekday” and “weekend” indicating whether a given date is a weekday or weekend day.
+
+```{r}
+activity2$dayname <- as.factor(weekdays(activity2$date))
+activity2$daytype <- "weekday"
+activity2$daytype[which(activity2$dayname == "Saturday" | activity2$dayname == "Sunday")] <- "weekend"
+activity2$daytype <- as.factor(activity2$daytype)
+head(activity2)
+summary(activity2)
+```
+
+A panel plot containing a time series plot of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). 
+
+The verage weekend and weekday activity pattern by interval:
+```{r}
+avg_steps2 <- activity2 %>% 
+  group_by(interval, daytype) %>%
+  summarise(steps_avg = mean(steps, na.rm = TRUE))
+head(avg_steps2)
+summary(avg_steps2)
+```
+
+```{r}
+  daytype_plot <- avg_steps2 %>%
+  ggplot(aes(x = interval, y = steps_avg)) 
+  daytype_plot + geom_line() +
+    facet_grid(daytype ~.) +
+   labs(title = "Average number of steps taken, across weekdays and weekends", x = "5-minute interval", y = "Average number of steps" ) +
+   theme_bw()
+```
 
 
 
-## What is mean total number of steps taken per day?
 
 
 
-## What is the average daily activity pattern?
-
-
-
-## Imputing missing values
-
-
-
-## Are there differences in activity patterns between weekdays and weekends?
