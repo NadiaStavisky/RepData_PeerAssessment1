@@ -332,8 +332,8 @@ ttl_hlines <- data.frame(daytype = c("weekday", "weekend"), mean_val = c(wd_mean
   ggplot(aes(x = as.integer(interval), y = steps_avg)) 
   daytype_plot + geom_line(show.legend = TRUE) +
     facet_grid(daytype ~.) +
-  geom_hline(aes(yintercept = mean_val, colour = "mean"), data = ttl_hlines, color = "red", show.legend = TRUE) +
-  geom_hline(aes(yintercept = median_val, colour = "median"), data = ttl_hlines, color = "green", show.legend = TRUE) +
+  geom_hline(aes(yintercept = mean_val), data = ttl_hlines, color = "red", show.legend = TRUE) +
+  geom_hline(aes(yintercept = median_val), data = ttl_hlines, color = "green", show.legend = TRUE) +
     scale_linetype_manual(name = "Values",values = c(2,2))    +
    labs(title = "Average number of steps taken, across weekdays and weekends", x = "5-minute interval", y = "Average number of steps" ) +
    theme_bw()
