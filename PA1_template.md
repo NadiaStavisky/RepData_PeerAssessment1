@@ -207,8 +207,7 @@ summary(avg_steps)
 ```
 
 ```r
-max <- as.numeric(c(avg_steps[which.max(avg_steps$steps_avg), 
-    1]))
+max <- (avg_steps[which.max(avg_steps$steps_avg), 1])
 ```
 
 A time series plot of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis):
@@ -218,7 +217,7 @@ A time series plot of the 5-minute interval (x-axis) and the average number of s
 ```r
 b <- ggplot(data = avg_steps, aes(x = as.integer(avg_steps$interval), 
     y = avg_steps$steps_avg))
-b + geom_line() + geom_vline(xintercept = max, color = "blue", 
+b + geom_line() + geom_vline(xintercept = as.numeric(max), color = "blue", 
     size = 1) + labs(title = "Average number of steps taken, across all days", 
     x = "5-minute interval", y = "Average number of steps") + 
     theme_bw()
@@ -226,7 +225,7 @@ b + geom_line() + geom_vline(xintercept = max, color = "blue",
 
 <img src="figs/unnamed-chunk-13-1.png" style="display: block; margin: auto;" />
 
-the 104 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps.
+the 835 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps.
 
 ##Imputing missing values
 
