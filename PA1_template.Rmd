@@ -7,6 +7,7 @@ output: html_document
 
 ```{r global.options, include = FALSE, echo=FALSE}
 #load library 'knitr', set a golobal default options:
+library(rmarkdown)
 library(knitr)
 library(ggplot2)
 library(formatR)
@@ -48,6 +49,10 @@ The variables included in this dataset are:
 ```{r}
 names(activity)
 ```
+- steps: Number of steps taking in a 5-minute interval (missing values are coded as \color{red}{\verb|NA|}NA)
+- date: The date on which the measurement was taken in YYYY-MM-DD format
+- interval: Identifier for the 5-minute interval in which measurement was taken
+
 data set structure:
 ```{r}
 str(activity)
@@ -66,6 +71,10 @@ Data set contains records of steps done in `r ndate` made in each `r ninterval` 
 transform date field from factors into dates:
 ```{r}
 activity$date <- as.Date(activity$date, format = "%Y-%m-%d")
+```
+transform Interval field from int into factors:
+```{r}
+activity$interval <- as.factor(activity$interval)
 ```
 
 dataset summary:
@@ -150,7 +159,7 @@ activity[,c("steps","date")] %>%
   filter(!complete.cases(steps)) %>%
   summarize(sum_na = sum(is.na(steps)))
 ```
-There are 8 dates with 288 missing records in these days. due to the total number of intervals are 288 -  no intervals have any ecords in this days.
+There are 8 dates with 288 missing records along these days. Due to the total number of 5 min intervals within a day is 288 -  there is no records in these days at all.
 
 ```{r}
 activity[,c("steps","interval")] %>%
@@ -176,17 +185,16 @@ summary(test_int)
 ```{r}
 test_int_plot <- test_int %>%
   gather(aggr_func, value, steps_int_mean:steps_int_median) %>%
-  ggplot(aes(x = interval, y = value, colour = aggr_func)) 
+  ggplot(aes(x = as.integer(interval), y = value, colour = aggr_func)) 
   test_int_plot + geom_line() +
    labs(title = "Mean and median of steps grouped by interval\n*missing values removed") +
    theme_bw()
   
 ```
 
+From the plot above we can conclude that the data grouped by interval highly skewed left. In most of the intervals mean of steps distribution much higher then median. Same we can conclude from skewness parametr. When data is seriously skewed like this, the median becomes far more representative of what’s ‘typical’ than the mean. We will visually explore both options.
 
-From the plot above we can conclude that the data grouped either by interval or by date highly skewed left. Same we can conclude from skewness parametr. When data is seriously skewed like this, the median becomes far more representative of what’s ‘typical’ than the mean.
-
-We are going to use median for that interval as a strategy for filling in all of the missing values in the dataset.
+First we are going to use median for that interval as a strategy for filling in all of the missing values in the dataset.
 
 ```{r}
 activity2 <- activity %>% 
@@ -220,24 +228,56 @@ median2 <- median(ttl_steps2$steps_sum)
 ```
 the mean and median of the total number of steps taken per day are `r mean2` and `r median2` correspondingly.
 
+Second we are using mean for that interval as a strategy for filling in all of the missing values in the dataset.
+
+```{r}
+activity3 <- activity %>% 
+  group_by(interval) %>%
+  mutate(steps = replace(steps, is.na(steps), mean(steps, na.rm =TRUE)))
+head(activity3)
+summary(activity3)
+```
+
+The total number of steps taken per day (data set with missing values replaced by Interval mean):
+```{r}
+ttl_steps3 <- activity3 %>% 
+  group_by(date) %>%
+  summarise(steps_sum = sum(steps, na.rm = TRUE))
+head(ttl_steps3)
+summary(ttl_steps3)
+```
+
+```{r}
+d <- ggplot(data = ttl_steps3, aes(ttl_steps3$steps_sum))
+d + geom_histogram(breaks = seq(0,25000, by = 2500), col="blue", fill="blue", alpha=.4) +
+   labs(title = "Histogram of Total Number of Steps Each Day\n*missing values replaced with interval mean", x = "Number of Steps", y = "Frequency") +
+   theme_bw()
+```
+```{r}
+mean3 <- mean(ttl_steps3$steps_sum)
+median3 <- median(ttl_steps3$steps_sum)
+```
+the mean and median of the total number of steps taken per day are `r mean3` and `r median3` correspondingly.
+
 #Do these values differ from the estimates from the first part of the assignment? 
 #What is the impact of imputing missing data on the estimates of the total daily number of steps?
 
 ```{r}
 ttl_steps$version <- "V1"
 ttl_steps2$version <- "V2"
+ttl_steps3$version <- "V3"
 
 
-ttl_comb <- rbind(ttl_steps,ttl_steps2)
+ttl_comb <- rbind(ttl_steps,ttl_steps2, ttl_steps3)
 
-ttl_vlines <- data.frame(version = levels(as.factor(ttl_comb$version)), mean_val = c(mean, mean2), median_val = c(median, median2))
+ttl_vlines <- data.frame(version = levels(as.factor(ttl_comb$version)), mean_val = c(mean, mean2, mean3), median_val = c(median, median2, median3))
 
 e <- ggplot(data = ttl_comb, aes(ttl_comb$steps_sum))
 e + geom_histogram(breaks = seq(0,25000, by = 2500), col="blue", fill="blue", alpha=.4) +
   geom_vline(aes(xintercept = mean_val), data = ttl_vlines, color = "red") +
   geom_vline(aes(xintercept = median_val), data = ttl_vlines, color = "green") +
   facet_grid(version ~.) +
-   labs(title = "Histogram of Total Number of Steps Each Day\n*V1 - missing values removed\n*V2 - missing values replaced with interval median", x = "Number of Steps", y = "Frequency") +
+   labs(title = "Histogram of Total Number of Steps Each Day\n*V1 - missing values removed\n*V2 - missing values replaced with interval mediann\n*V3 - missing values replaced with interval mean", x = "Number of Steps", y = "Frequency") +
    theme_bw()
 ```
 
@@ -246,11 +286,14 @@ ttl_vlines
 ```
 
 
-In the data set with replaced missing values Mean and Median values are differ from the first version of the data set summary (with missing values ignored).
+In the data set with replaced missing values using inteval medians Mean and Median values are differ from the first version of the data set summary (with missing values ignored).
 The imputing missing values effect on the steps distribution by dates results in appearing second pick, within 0 - 2500 steps group.
 
+In the data set with replaced missing values using inteval means Mean and Median values are close to the first velues inth version of the data set summary (with missing values ignored).
+The imputing missing with values effect on the steps distribution by dates results in adding more wieghts on the group, 10000 - 12500 steps group.
+
 ##Are there differences in activity patterns between weekdays and weekends?
-Dataset used with the filled-in missing values for this part.
+Dataset used with the filled-in missing values for this part using interval medians.
 
 Create a new factor variable in the dataset with two levels – “weekday” and “weekend” indicating whether a given date is a weekday or weekend day.
 
@@ -275,16 +318,31 @@ summary(avg_steps2)
 ```
 
 ```{r}
+wd_mean <- mean(avg_steps2$steps_avg[which(avg_steps2$daytype == "weekday")])
+we_mean <- mean(avg_steps2$steps_avg[which(avg_steps2$daytype == "weekend")])
+
+wd_median <- median(avg_steps2$steps_avg[which(avg_steps2$daytype == "weekday")])
+we_median <- median(avg_steps2$steps_avg[which(avg_steps2$daytype == "weekend")])
+
+
+
+ttl_hlines <- data.frame(daytype = c("weekday", "weekend"), mean_val = c(wd_mean, we_mean), median_val = c(wd_median, we_median))
+
   daytype_plot <- avg_steps2 %>%
-  ggplot(aes(x = interval, y = steps_avg)) 
-  daytype_plot + geom_line() +
+  ggplot(aes(x = as.integer(interval), y = steps_avg)) 
+  daytype_plot + geom_line(show.legend = TRUE) +
     facet_grid(daytype ~.) +
+  geom_hline(aes(yintercept = mean_val, colour = "mean"), data = ttl_hlines, color = "red", show.legend = TRUE) +
+  geom_hline(aes(yintercept = median_val, colour = "median"), data = ttl_hlines, color = "green", show.legend = TRUE) +
+    scale_linetype_manual(name = "Values",values = c(2,2))    +
    labs(title = "Average number of steps taken, across weekdays and weekends", x = "5-minute interval", y = "Average number of steps" ) +
    theme_bw()
 ```
 
-
-
-
+Horisontal lines represent the $\color{red}{mean}$ and $\color{green}{median}$ of the total average number of steps taken within weedays and weekends.
+```{r}
+ttl_hlines
+```
+Weekend steps summaries slightly higher then summaries steps recorded during the weekdays.
 
 
